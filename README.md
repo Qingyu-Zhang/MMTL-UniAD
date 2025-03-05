@@ -32,8 +32,7 @@ smooth).
 1. **克隆仓库** | **Clone the repository**
 
 ```bash
-git clone https://github.com/Wenzhuo-Liu/MMTL-UniAD
-cd 
+git clone https://github.com/Wenzhuo-Liu/MMTL-UniAD.git
 ```
 
 2. **创建虚拟环境** | **Create a virtual environment**
