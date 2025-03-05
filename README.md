@@ -17,22 +17,7 @@ learning framework that simultaneously recognizes
 driver behavior (e.g., looking around, talking), driver emotion
 (e.g., anxiety, happiness), vehicle behavior (e.g., parking,
 turning), and traffic context (e.g., traffic jam, traffic
-smooth). A key challenge is avoiding negative transfer between
-tasks, which can impair learning performance. To
-address this, we introduce two key components into the
-framework: one is the multi-axis region attention network
-to extract global context-sensitive features, and the other
-is the dual-branch multimodal embedding to learn multimodal
-embeddings from both task-shared and task-specific
-features. The former uses a multi-attention mechanism to
-extract task-relevant features, mitigating negative transfer
-caused by task-unrelated features. The latter employs a
-dual-branch structure to adaptively adjust task-shared and
-task-specific parameters, enhancing cross-task knowledge
-transfer while reducing task conflicts. We assess MMTLUniAD
-on the AIDE dataset, using a series of ablation studies,
-and show that it outperforms state-of-the-art methods
-across all four tasks.
+smooth).
 
 ## 环境搭建 | Environment Setup
 
@@ -47,7 +32,7 @@ across all four tasks.
 1. **克隆仓库** | **Clone the repository**
 
 ```bash
-git clone 
+git clone https://github.com/Wenzhuo-Liu/MMTL-UniAD
 cd 
 ```
 
