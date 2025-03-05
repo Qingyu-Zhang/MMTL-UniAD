@@ -1,7 +1,7 @@
 # MMTL-UniAD: A Unified Framework for Multimodal and Multi-Task Learning in Assistive Driving Perception
 
 <div align="center">
-  <img src="framework.png" alt="TLogo" width="600"/>
+  <img src="framework.pdf" alt="TLogo" width="600"/>
 </div>
 
 ## 简介 | Introduction
