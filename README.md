@@ -49,12 +49,12 @@ conda activate MMTL
 ```bash
 pip install -r requirements.txt
 ```
+## Dataset
+
+The project is trained, validated, and tested using the AIDE dataset. For dataset-related files or more information, please search for "AIDE Dataset" online or visit its official repository.
+
 
 ## Data Preprocessing
-
-###  Using Crop.py for Preprocessing
-
-The `Crop.py` script is used to extract facial and body regions from the original images:
 
 ```bash
 python Crop.py
