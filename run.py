@@ -601,10 +601,10 @@ class TotalNet(nn.Module):
     def forward(self, img1, img2, img3, img4, face, body, gesture, posture):
 
         # Original feature extraction
-        h1 = self.net1(self.subnet1(img1))
-        h2 = self.net2(self.subnet2(img2))
-        h3 = self.net3(self.subnet3(img3))
-        h4 = self.net4(self.subnet4(img4))
+        h1 = self.marnet1(self.subnet1(img1))
+        h2 = self.marnet2(self.subnet2(img2))
+        h3 = self.marnet3(self.subnet3(img3))
+        h4 = self.marnet4(self.subnet4(img4))
 
         h_face = F.interpolate(self.subnet5(face), size=(h1.size(2), h1.size(3)), mode='bilinear', align_corners=True)
         h_body = F.interpolate(self.subnet6(body), size=(h1.size(2), h1.size(3)), mode='bilinear', align_corners=True)
