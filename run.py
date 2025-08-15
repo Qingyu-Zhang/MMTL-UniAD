@@ -6,7 +6,7 @@ import os
 os.environ["CUDA_VISIBLE_DEVICES"] = '0'
 import math
 
-from pytorchtools import EarlyStopping
+from early_stopping_pytorch import EarlyStopping
 import torch
 from torch.utils.data import DataLoader, Dataset
 from torch.optim import *
