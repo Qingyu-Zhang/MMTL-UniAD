@@ -59,16 +59,16 @@ class CarDataset(Dataset):
             idx = idx.tolist()
 
         frames_path, label_path = self.path.iloc[idx]
-        frames_path = '/root/' + frames_path
-        label_path = '/root/' + label_path
+        frames_path = '/root/gpufree-data/' + frames_path
+        label_path = '/root/gpufree-data/' + label_path
 
-        parts1 = frames_path.split('/')
-        # parts1.insert(4, 'AIDE_Dataset')  # 在第四个元素后添加 'AIDE_Dataset'
-        frames_path = '/'.join(parts1)
-
-        parts2 = label_path.split('/')
-        # parts2.insert(4, 'AIDE_Dataset')  # 在第四个元素后添加 'AIDE_Dataset'
-        label_path = '/'.join(parts2)
+        # parts1 = frames_path.split('/')
+        # # parts1.insert(4, 'AIDE_Dataset')  # 在第四个元素后添加 'AIDE_Dataset'
+        # frames_path = '/'.join(parts1)
+        #
+        # parts2 = label_path.split('/')
+        # # parts2.insert(4, 'AIDE_Dataset')  # 在第四个元素后添加 'AIDE_Dataset'
+        # label_path = '/'.join(parts2)
 
         label_json = json.load(open(label_path))
         pose_list = label_json['pose_list']
@@ -285,9 +285,9 @@ def setup_seed(seed):
 # 设置随机数种子
 setup_seed(20)
 
-train_dataset = CarDataset(csv_file='/root/training.csv')  # 'training.csv'
-val_dataset = CarDataset(csv_file='/root/validation.csv')
-test_dataset = CarDataset(csv_file='/root/testing.csv')
+train_dataset = CarDataset(csv_file="/root/gpufree-data/AIDE/training.csv")
+val_dataset   = CarDataset(csv_file="/root/gpufree-data/AIDE/validation.csv")
+test_dataset  = CarDataset(csv_file="/root/gpufree-data/AIDE/testing.csv")
 
 train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, num_workers=4, drop_last=False)
 val_dataloader = DataLoader(val_dataset, batch_size=64,shuffle=False, num_workers=4, drop_last=False)
@@ -918,7 +918,19 @@ choices = ["demo", "main", "test", "checkValidation", "getVideoEmbeddings", "gen
 # parser = argparse.ArgumentParser(description="Select code to run.")
 # parser.add_argument('--mode', default="test", choices=choices, type=str)
 
-checkpoint_dir = '/root/AIDE'
+OUT_DIR = "/root/gpufree-data/MMTL-UniAD/outputs"
+LOG_DIR = os.path.join(OUT_DIR, "logs")
+os.makedirs(LOG_DIR, exist_ok=True)
+os.makedirs(OUT_DIR, exist_ok=True)
+
+checkpoint_path = os.path.join(OUT_DIR, "checkpoint.pth")
+checkpoint_dir  = OUT_DIR
+best_path       = os.path.join(checkpoint_dir, "best_model_CNNTrans_basic_v5.pt")
+
+train_log = os.path.join(LOG_DIR, "train_CNNTrans_basic_v5.txt")
+VAL_HISTORY_LOG = os.path.join(LOG_DIR, "val_history.txt")
+VAL_BEST_LOG    = os.path.join(LOG_DIR, "val_best.txt")
+test_log  = os.path.join(LOG_DIR, "test_CNNTrans_basic_v5.txt")
 
 
 class valConfusionMatrix(object):
@@ -1102,7 +1114,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         else:
             print("No checkpoint found, starting from scratch")
             return 0
-    checkpoint_path = './checkpoint.pth'
+    # checkpoint_path = './checkpoint.pth'
 
 # Example usage before starting the training loop:
     start_epoch = load_checkpoint(model, optim, checkpoint_path)
@@ -1243,7 +1255,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                 train_acc3.getacc(),
                 train_acc4.getacc()))
 
-            with open(file="/root/AIDE/CNNTrans_basic_v5.txt", mode="a+") as f:
+            with open(file=train_log, mode="a+") as f:
                 f.write("Epoch: %d, Subepoch: %d, Loss: %f, batch_size: %d, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f"\
                      %(epoch, subepoch, train_losses.avg, M, train_acc1.getacc(), train_acc2.getacc(), train_acc3.getacc(), train_acc4.getacc()))
             
@@ -1389,7 +1401,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                         val_acc3.getacc(),
                         val_acc4.getacc(), avgf11, avgf12, avgf13, avgf14))
                 
-                with open(file="/root/AIDE/val_CNNTrans_basic_v5.txt", mode="a+") as f:
+                with open(file=VAL_HISTORY_LOG, mode="a+") as f:
                     f.write("Epoch: %d, Subepoch: %d, Loss: %f, batch_size: %d, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f, \
                             avgf11: %f, avgf12: %f, avgf13: %f, avgf14: %f\n"\
                      %(epoch, subepoch1, val_losses, M, val_acc1.getacc(), val_acc2.getacc(), val_acc3.getacc(), val_acc4.getacc(),avgf11, avgf12, avgf13, avgf14))
@@ -1410,9 +1422,9 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
 
         # 保存最佳模型(将当前模型的权重保存到best_model.pt文件中)
-        best_path = os.path.join(checkpoint_dir, 'best_model_CNNTrans_basic_v5.pt')
+        # best_path = os.path.join(checkpoint_dir, 'best_model_CNNTrans_basic_v5.pt')
         if is_best:
-            with open(file="/root/val_CNNTrans_basic_v5.txt", mode="w") as f:
+            with open(file=VAL_BEST_LOG, mode="w") as f:
                     f.write("Epoch: %d, Subepoch: %d, Loss: %f, batch_size: %d, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f, \
                             avgf11: %f, avgf12: %f, avgf13: %f, avgf14: %f\n"\
                      %(epoch, subepoch1, val_losses, M, val_acc1.getacc(), val_acc2.getacc(), val_acc3.getacc(), val_acc4.getacc(),avgf11, avgf12, avgf13, avgf14))
@@ -1455,7 +1467,7 @@ class TestMeter(object):
         return (self.sum * 100) / self.count
 
 
-def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTrans_basic_v5.pt"):
+def test(use_cuda=True, batch_size=16, model_name=best_path):
 
     model = TotalNet()  # 创建模型实例
     model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
@@ -1465,7 +1477,7 @@ def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTran
         print("Loading from previous checkpoint.")
         
 
-    test_dataset = CarDataset(csv_file='/root/testing.csv')
+    # test_dataset = CarDataset(csv_file='/root/gpufree-data/AIDE/testing.csv')
 
     # testdataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
@@ -1582,7 +1594,7 @@ def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTran
                     test_acc3.getacc(),
                     test_acc4.getacc(), avgf11, avgf12, avgf13, avgf14))
             
-            with open(file="/root/AIDE/test_CNNTrans_basic_v5.txt", mode="a+") as f:
+            with open(file=test_log, mode="a+") as f:
                     f.write("Test  Subepoch: %d, batch_size: %d,total_acc1: %f, total_acc2: %f, "
                 "total_acc3: %f, total_acc4: %f, avgf11: %f, avgf12: %f, avgf13: %f, avgf14: %f\n"\
                      %(subepoch2, M,
