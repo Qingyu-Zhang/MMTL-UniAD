@@ -4,6 +4,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 from torch import Tensor
+import math
 
 class GLIBlock(nn.Module):
     def __init__(self, channels, ratio,gamma = 2, b = 1):
@@ -19,7 +20,7 @@ class GLIBlock(nn.Module):
         kernel_size = kernel_size if kernel_size % 2 else kernel_size + 1
         self.conv = nn.Conv1d(1, 1, kernel_size = kernel_size, padding = (kernel_size - 1) // 2, bias = False)
 
-        self.cfc = Parameter(torch.Tensor(channels, 2))
+        self.cfc = nn.Parameter(torch.Tensor(channels, 2))
         self.cfc.data.fill_(0)
 
         self.bn = nn.BatchNorm2d(channels)

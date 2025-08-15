@@ -104,13 +104,13 @@ class ECAAttention(nn.Module):
     
 if __name__ == "__main__":
 
-    model = DBME(channels)#.cuda()
+    # model = DBME(channels)#.cuda()
     print("Model loaded.")
     x1 = torch.rand(2, 512,1,1)#.cuda()
     x2 = torch.rand(2, 512,1,1)#.cuda()
     print("x1 and x2 loaded.")
 
 	# Run a feedforward and check shape
-    c = model(x1, x2)
-    print(image.shape)
-    print(c.shape)
+    # c = model(x1, x2)
+    # print(image.shape)
+    # print(c.shape)

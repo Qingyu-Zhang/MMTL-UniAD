@@ -14,7 +14,7 @@ from torch.autograd import *
 from torch import nn
 from torch.nn import functional as F
 from matplotlib import pyplot as plt
-from GLI_CAM import GLIBlock
+# from GLI_CAM import GLIBlock
 import shutil
 import time
 from matplotlib import pyplot as plt
@@ -1329,9 +1329,9 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                 loss = loss1 + loss2 + loss3 + loss4
                 # print(loss)
                 val_losses1.update(loss1.item(), M)
-                val_losses2.update(loss1.item(), M)
-                val_losses3.update(loss1.item(), M)
-                val_losses4.update(loss1.item(), M)
+                val_losses2.update(loss2.item(), M)
+                val_losses3.update(loss3.item(), M)
+                val_losses4.update(loss4.item(), M)
 
                 val_losses = (val_losses1.avg + val_losses2.avg + val_losses3.avg + val_losses4.avg) / 4.0
                 #早停，防止过拟合
@@ -1467,9 +1467,9 @@ def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTran
 
     test_dataset = CarDataset(csv_file='/root/testing.csv')
 
-    testdataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
+    # testdataloader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True, num_workers=2)
 
-    crossEntropy = nn.CrossEntropyLoss()
+    # crossEntropy = nn.CrossEntropyLoss()
     print("Loaded dataloader and loss function.")
 
     test_losses = LossAverageMeter()
@@ -1606,7 +1606,7 @@ def test(use_cuda=True, batch_size=16, model_name="/root/AIDE/best_model_CNNTran
 if __name__ == "__main__":
     cuda = True
 
-mode = "test"
+mode = "train"
 print("running...")
 
 if mode == "train":
