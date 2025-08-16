@@ -26,7 +26,7 @@ def extract_face_and_body(image, face_bbox, body_bbox):
     body = image[body_bbox[1]:body_bbox[1]+body_bbox[3], body_bbox[0]:body_bbox[0]+body_bbox[2]]
     return face, body
 
-def process_data(data_dir, annotation_dir, start_from=0):
+def process_data(data_dir, annotation_dir, start_from=-1):
     for subdir in sorted(os.listdir(data_dir)):
         if is_number(subdir):
             subdir_num = int(subdir)
