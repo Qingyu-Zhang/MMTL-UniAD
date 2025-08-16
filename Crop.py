@@ -72,5 +72,5 @@ def process_data(data_dir, annotation_dir, start_from=0):
 data_directory = "/root/gpufree-data/AIDE_Dataset"
 annotation_directory = os.path.join(data_directory, "annotation")
 
-process_data(data_directory, annotation_directory, start_from=0)  #这里是不是应该start from 0?
+process_data(data_directory, annotation_directory, start_from=-1)  #这里是不是应该start from 0?
 
