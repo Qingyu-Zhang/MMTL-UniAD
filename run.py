@@ -289,8 +289,8 @@ train_dataset = CarDataset(csv_file="/root/gpufree-data/AIDE/training.csv")
 val_dataset   = CarDataset(csv_file="/root/gpufree-data/AIDE/validation.csv")
 test_dataset  = CarDataset(csv_file="/root/gpufree-data/AIDE/testing.csv")
 
-train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, num_workers=4, drop_last=False)
-val_dataloader = DataLoader(val_dataset, batch_size=24,shuffle=False, num_workers=4, drop_last=False)
+train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, num_workers=2, drop_last=False)
+val_dataloader = DataLoader(val_dataset, batch_size=24,shuffle=False, num_workers=2, drop_last=False)
 test_dataloader = DataLoader(test_dataset, batch_size=24, shuffle=False, num_workers=0, drop_last=False)
 
 
@@ -1061,7 +1061,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     # model = ImageConvNet().cuda()
     # model = TotalNet().cuda()
     model = TotalNet()  # 创建模型实例
-    model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
+    # model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
     
     # model_dict = torch.load("/root/GLMDrivenet/best_model_cmt.pt")
     # # model.load_state_dict({k.replace('module.',''):v for k,v in model_dict.items()})
@@ -1082,26 +1082,63 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
     # optim = SGD(model.parameters(), lr=0.25e-4, momentum=0.9, weight_decay=1e-4)
 
-    #我的修改
-    # 1) 一次性创建优化器
-    optim = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
+    #我的修改(第一版优化器修改）
+    # # 1) 一次性创建优化器
+    # optim = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
+    #
+    # # 2) 自定义分段倍率（准确复刻你的区间）
+    # def lr_factor(epoch_idx: int) -> float:
+    #     # epoch_idx 从 0 开始：0,1,2,...；你的原条件里是 <=25 等“人类数法”
+    #     ep = epoch_idx  # 我们在 epoch 结束时调用 scheduler.step()，所以这里用当前 epoch 索引即可
+    #     if ep <= 25:
+    #         return 1.0  # 1e-3
+    #     elif ep <= 50:
+    #         return 0.5  # 5e-4
+    #     elif ep <= 75:
+    #         return 0.05  # 5e-5
+    #     elif ep <= 100:
+    #         return 0.01  # 1e-5
+    #     else:
+    #         return 0.005  # 5e-6
+    #
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_factor)
 
-    # 2) 自定义分段倍率（准确复刻你的区间）
-    def lr_factor(epoch_idx: int) -> float:
-        # epoch_idx 从 0 开始：0,1,2,...；你的原条件里是 <=25 等“人类数法”
-        ep = epoch_idx  # 我们在 epoch 结束时调用 scheduler.step()，所以这里用当前 epoch 索引即可
-        if ep <= 25:
-            return 1.0  # 1e-3
-        elif ep <= 50:
-            return 0.5  # 5e-4
-        elif ep <= 75:
-            return 0.05  # 5e-5
-        elif ep <= 100:
-            return 0.01  # 1e-5
-        else:
-            return 0.005  # 5e-6
 
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_factor)
+    #我的修改（第二版优化器修改）
+    # ==== 优化器（AdamW + 分组权衰）====
+    decay, no_decay = [], []
+    for n, p in model.named_parameters():
+        if p.requires_grad:
+            if p.ndim >= 2 and 'norm' not in n.lower():  # 权重矩阵走衰减
+                decay.append(p)
+            else:  # bias/Norm 不衰减
+                no_decay.append(p)
+
+    param_groups = [
+        {'params': decay, 'weight_decay': 0.01},
+        {'params': no_decay, 'weight_decay': 0.0},
+    ]
+
+    optim = torch.optim.AdamW(param_groups, lr=3e-4, betas=(0.9, 0.999))
+
+    # ==== 调度器（5% warmup + 余弦到 0.1×）====
+    accum_steps = 1  # 如无梯度累积就保持 1
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / accum_steps)
+    total_steps = num_update_steps_per_epoch * EPOCHS
+    warmup_steps = int(0.05 * total_steps)
+
+    def lr_lambda(step):
+        if step < warmup_steps:
+            return step / max(1, warmup_steps)
+        prog = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+        return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * prog))
+
+    # 如果是“全新开始训练”：
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=-1)
+
+    # 如果“从 epoch = start_epoch 续训但没有保存旧 scheduler 状态”，估算已走的步数避免重复 warmup：
+    # global_step = start_epoch * num_update_steps_per_epoch
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=global_step-1)
 
     print("Optimizer loaded.")
     model.train()
@@ -1151,7 +1188,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         start_epoch = load_checkpoint(model, optim, scheduler, checkpoint_path)
 
     #早停对象应该在进训练前定义
-    early_stopping = EarlyStopping(patience=7, verbose=True)
+    early_stopping = EarlyStopping(patience=10, verbose=True)
 
     for epoch in range(start_epoch, EPOCHS):
         #原本代码并没有在每个epoch开始的时候将模型设回train模式
@@ -1256,6 +1293,8 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
             # 反向传播，进一步优化
             loss.backward()
             optim.step()
+            optim.zero_grad(set_to_none=True)  #这两行是我的第二版优化器添加的
+            scheduler.step()  # ✅ 放在 optimizer.step() 之后
 
             # Calculate accuracy
             out1 = F.softmax(out1, 1)  # Softmax将一组数值转换为概率分布
@@ -1460,12 +1499,17 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         print("Epoch: %d,best_precision: %f,lowest_loss: %f,best_avgf1: %f" % (
         epoch, best_precision, lowest_loss, best_avgf1))
 
-        #我加的scheduler更新
-        # ... 验证完整个 val_loader，得到 val_loss_epoch ...
-        scheduler.step()  # 放在每个 epoch 末
-        # 打印当前 LR，便于核对
-        cur_lr = optim.param_groups[0]["lr"]
-        print(f"[epoch {epoch}] lr={cur_lr:.6g}")
+        # #我加的scheduler更新（第一版优化器）
+        # # ... 验证完整个 val_loader，得到 val_loss_epoch ...
+        # scheduler.step()  # 放在每个 epoch 末
+        # # 打印当前 LR，便于核对
+        # cur_lr = optim.param_groups[0]["lr"]
+        # print(f"[epoch {epoch}] lr={cur_lr:.6g}")
+
+        #第二版优化器添加
+        cur_lr = optim.param_groups[0]['lr']
+        print(f"[epoch {epoch}] lr={cur_lr:.6f}")
+
 
         # 保存最佳模型(将当前模型的权重保存到best_model.pt文件中)
         # best_path = os.path.join(checkpoint_dir, 'best_model_CNNTrans_basic_v5.pt')
@@ -1537,7 +1581,7 @@ class TestMeter(object):
 def test(use_cuda=True, batch_size=16, model_name=best_path):
 
     model = TotalNet()  # 创建模型实例
-    model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
+    # model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
     model = model.cuda()  # 将模型移动到 CUDA 上
     if os.path.exists(model_name):
         model.load_state_dict(torch.load(model_name))
