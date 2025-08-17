@@ -1079,7 +1079,30 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
     # optim = Adam(model.parameters(), lr=lr, weight_decay=1e-7)
     # optim = SGD(model.parameters(), lr=0.25e-3, momentum=0.9, weight_decay=1e-4)
-    optim = SGD(model.parameters(), lr=0.25e-4, momentum=0.9, weight_decay=1e-4)
+
+    # optim = SGD(model.parameters(), lr=0.25e-4, momentum=0.9, weight_decay=1e-4)
+
+    #我的修改
+    # 1) 一次性创建优化器
+    optim = torch.optim.SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
+
+    # 2) 自定义分段倍率（准确复刻你的区间）
+    def lr_factor(epoch_idx: int) -> float:
+        # epoch_idx 从 0 开始：0,1,2,...；你的原条件里是 <=25 等“人类数法”
+        ep = epoch_idx  # 我们在 epoch 结束时调用 scheduler.step()，所以这里用当前 epoch 索引即可
+        if ep <= 25:
+            return 1.0  # 1e-3
+        elif ep <= 50:
+            return 0.5  # 5e-4
+        elif ep <= 75:
+            return 0.05  # 5e-5
+        elif ep <= 100:
+            return 0.01  # 1e-5
+        else:
+            return 0.005  # 5e-6
+
+    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_factor)
+
     print("Optimizer loaded.")
     model.train()
 
@@ -1103,23 +1126,36 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
     # with open("result_body_res.txt", "w") as f:
     #     pass
-    def load_checkpoint(model, optimizer, checkpoint_path):
+    def load_checkpoint(model, optimizer, scheduler, checkpoint_path):
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
+                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            best_precision = checkpoint["best_precision"]
+            lowest_loss = checkpoint["lowest_loss"]
+            best_avgf1 = checkpoint["best_avgf1"]
             start_epoch = checkpoint['epoch'] + 1
             print(f"Resumed training from epoch {start_epoch}")
-            return start_epoch
+            return start_epoch, best_precision, lowest_loss, best_avgf1
         else:
             print("No checkpoint found, starting from scratch")
             return 0
     # checkpoint_path = './checkpoint.pth'
 
 # Example usage before starting the training loop:
-    start_epoch = load_checkpoint(model, optim, checkpoint_path)
+    if os.path.exists(checkpoint_path):
+        start_epoch, best_precision, lowest_loss, best_avgf1 = load_checkpoint(model, optim, scheduler, checkpoint_path)
+    else:
+        start_epoch = load_checkpoint(model, optim, scheduler, checkpoint_path)
+
+    #早停对象应该在进训练前定义
+    early_stopping = EarlyStopping(patience=7, verbose=True)
 
     for epoch in range(start_epoch, EPOCHS):
+        #原本代码并没有在每个epoch开始的时候将模型设回train模式
+        model.train()
           
 
     # for epoch in range(EPOCHS):
@@ -1130,16 +1166,18 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         # if (epoch > 50):
         #     optim = SGD(model.parameters(), lr=0.5e-4, momentum=0.9, weight_decay=1e-4)
         # # Run algo
-        if ( epoch <= 25):
-            optim = SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
-        if (25 < epoch <= 50):
-            optim = SGD(model.parameters(), lr=0.5e-3, momentum=0.9, weight_decay=1e-4)
-        if (50 < epoch <= 75):
-            optim = SGD(model.parameters(), lr=0.5e-4, momentum=0.9, weight_decay=1e-4)
-        if (75 < epoch <= 100):
-            optim = SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=1e-4)  
-        if ( epoch> 100):
-            optim = SGD(model.parameters(), lr=0.5e-5, momentum=0.9, weight_decay=1e-4)   
+
+
+        # if ( epoch <= 25):
+        #     optim = SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
+        # if (25 < epoch <= 50):
+        #     optim = SGD(model.parameters(), lr=0.5e-3, momentum=0.9, weight_decay=1e-4)
+        # if (50 < epoch <= 75):
+        #     optim = SGD(model.parameters(), lr=0.5e-4, momentum=0.9, weight_decay=1e-4)
+        # if (75 < epoch <= 100):
+        #     optim = SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=1e-4)
+        # if ( epoch> 100):
+        #     optim = SGD(model.parameters(), lr=0.5e-5, momentum=0.9, weight_decay=1e-4)
         # 训练损失
         train_losses = LossAverageMeter()
 
@@ -1256,7 +1294,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                 train_acc4.getacc()))
 
             with open(file=train_log, mode="a+") as f:
-                f.write("Epoch: %d, Subepoch: %d, Loss: %f, batch_size: %d, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f"\
+                f.write("Epoch: %d, Subepoch: %d, Loss: %f, batch_size: %d, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f\n"\
                      %(epoch, subepoch, train_losses.avg, M, train_acc1.getacc(), train_acc2.getacc(), train_acc3.getacc(), train_acc4.getacc()))
             
 
@@ -1346,14 +1384,16 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                 val_losses4.update(loss4.item(), M)
 
                 val_losses = (val_losses1.avg + val_losses2.avg + val_losses3.avg + val_losses4.avg) / 4.0
-                #早停，防止过拟合
-                early_stopping = EarlyStopping(7, verbose=True)
-                early_stopping(val_losses, model)
-                # 若满足 early stopping 要求
-                if early_stopping.early_stop:
-                    print("Early stopping")
-                    # 结束模型训练
-                    break
+
+                # #早停，防止过拟合   (实际上这个原本代码中的早停位置有问题，应该在每个epoch结束之后尝试触发早停）
+                # early_stopping = EarlyStopping(7, verbose=True)
+                # early_stopping(val_losses, model)
+                # # 若满足 early stopping 要求
+                # if early_stopping.early_stop:
+                #     print("Early stopping")
+                #     # 结束模型训练
+                #     break
+
                 # Calculate accuracy
                 out1 = F.softmax(out1, 1)
                 ind1 = out1.argmax(dim=1)
@@ -1420,6 +1460,12 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         print("Epoch: %d,best_precision: %f,lowest_loss: %f,best_avgf1: %f" % (
         epoch, best_precision, lowest_loss, best_avgf1))
 
+        #我加的scheduler更新
+        # ... 验证完整个 val_loader，得到 val_loss_epoch ...
+        scheduler.step()  # 放在每个 epoch 末
+        # 打印当前 LR，便于核对
+        cur_lr = optim.param_groups[0]["lr"]
+        print(f"[epoch {epoch}] lr={cur_lr:.6g}")
 
         # 保存最佳模型(将当前模型的权重保存到best_model.pt文件中)
         # best_path = os.path.join(checkpoint_dir, 'best_model_CNNTrans_basic_v5.pt')
@@ -1430,21 +1476,42 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                      %(epoch, subepoch1, val_losses, M, val_acc1.getacc(), val_acc2.getacc(), val_acc3.getacc(), val_acc4.getacc(),avgf11, avgf12, avgf13, avgf14))
             # shutil.copyfile(save_path, best_path)
             torch.save(model.state_dict(), best_path)
+
+            #加一个如果最佳模型就保存checkpoint吧
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optim.state_dict(),
+                "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
+                'best_precision': best_precision,
+                'lowest_loss': lowest_loss,
+                'best_avgf1': best_avgf1,
+            }, checkpoint_path)
+
             print("Successfully saved the model with the best precision!")
+            print("Successfully saved checkpoint!")
 
         # 保存最低损失模型
         # lowest_path = os.path.join(checkpoint_dir, 'lowest_loss_swin_block_context.pt')
         # if is_lowest_loss:
         #     shutil.copyfile(save_path, lowest_path)
             # torch.save(model.state_dict(), lowest_path)
-            print("Successfully saved the model with the lowest loss!")
+            # print("Successfully saved the model with the lowest loss!")
 
         # 保存最佳平均F1模型
         # best_avgf1_path = os.path.join(checkpoint_dir, 'best_avgf1_swin_block_context.pt')
         # if is_best_avgf1:
         #     shutil.copyfile(save_path, best_avgf1_path)
             # torch.save(model.state_dict(), best_avgf1_path)
-            print("Successfully saved the model with the best avgf1!")
+            # print("Successfully saved the model with the best avgf1!")
+
+        #尝试触发早停
+        early_stopping(val_losses, model)
+        # 若满足 early stopping 要求
+        if early_stopping.early_stop:
+            print("Early stopping!")
+            # 结束模型训练
+            break
 
 
 
