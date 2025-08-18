@@ -289,8 +289,8 @@ train_dataset = CarDataset(csv_file="/root/gpufree-data/AIDE/training.csv")
 val_dataset   = CarDataset(csv_file="/root/gpufree-data/AIDE/validation.csv")
 test_dataset  = CarDataset(csv_file="/root/gpufree-data/AIDE/testing.csv")
 
-train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, num_workers=2, drop_last=False)
-val_dataloader = DataLoader(val_dataset, batch_size=24,shuffle=False, num_workers=2, drop_last=False)
+train_dataloader = DataLoader(train_dataset, batch_size=24, shuffle=True, num_workers=6, drop_last=False)
+val_dataloader = DataLoader(val_dataset, batch_size=64,shuffle=False, num_workers=2, drop_last=False)
 test_dataloader = DataLoader(test_dataset, batch_size=24, shuffle=False, num_workers=0, drop_last=False)
 
 
@@ -932,6 +932,8 @@ VAL_HISTORY_LOG = os.path.join(LOG_DIR, "val_history.txt")
 VAL_BEST_LOG    = os.path.join(LOG_DIR, "val_best.txt")
 test_log  = os.path.join(LOG_DIR, "test_CNNTrans_basic_v5.txt")
 
+train_and_val_epoch_wise_log = os.path.join(LOG_DIR, "train_and_val_epoch_wise.txt")
+
 
 class valConfusionMatrix(object):
     def __init__(self, num_classes: int, labels: list):
@@ -1080,7 +1082,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     # optim = Adam(model.parameters(), lr=lr, weight_decay=1e-7)
     # optim = SGD(model.parameters(), lr=0.25e-3, momentum=0.9, weight_decay=1e-4)
 
-    # optim = SGD(model.parameters(), lr=0.25e-4, momentum=0.9, weight_decay=1e-4)
+    optim = SGD(model.parameters(), lr=0.25e-4, momentum=0.9, weight_decay=1e-4)
 
     #我的修改(第一版优化器修改）
     # # 1) 一次性创建优化器
@@ -1104,41 +1106,41 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda=lr_factor)
 
 
-    #我的修改（第二版优化器修改）
-    # ==== 优化器（AdamW + 分组权衰）====
-    decay, no_decay = [], []
-    for n, p in model.named_parameters():
-        if p.requires_grad:
-            if p.ndim >= 2 and 'norm' not in n.lower():  # 权重矩阵走衰减
-                decay.append(p)
-            else:  # bias/Norm 不衰减
-                no_decay.append(p)
-
-    param_groups = [
-        {'params': decay, 'weight_decay': 0.01},
-        {'params': no_decay, 'weight_decay': 0.0},
-    ]
-
-    optim = torch.optim.AdamW(param_groups, lr=3e-4, betas=(0.9, 0.999))
-
-    # ==== 调度器（5% warmup + 余弦到 0.1×）====
-    accum_steps = 1  # 如无梯度累积就保持 1
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / accum_steps)
-    total_steps = num_update_steps_per_epoch * EPOCHS
-    warmup_steps = int(0.05 * total_steps)
-
-    def lr_lambda(step):
-        if step < warmup_steps:
-            return step / max(1, warmup_steps)
-        prog = (step - warmup_steps) / max(1, total_steps - warmup_steps)
-        return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * prog))
-
-    # 如果是“全新开始训练”：
-    scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=-1)
-
-    # 如果“从 epoch = start_epoch 续训但没有保存旧 scheduler 状态”，估算已走的步数避免重复 warmup：
-    # global_step = start_epoch * num_update_steps_per_epoch
-    # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=global_step-1)
+    # #我的修改（第二版优化器修改）
+    # # ==== 优化器（AdamW + 分组权衰）====
+    # decay, no_decay = [], []
+    # for n, p in model.named_parameters():
+    #     if p.requires_grad:
+    #         if p.ndim >= 2 and 'norm' not in n.lower():  # 权重矩阵走衰减
+    #             decay.append(p)
+    #         else:  # bias/Norm 不衰减
+    #             no_decay.append(p)
+    #
+    # param_groups = [
+    #     {'params': decay, 'weight_decay': 0.01},
+    #     {'params': no_decay, 'weight_decay': 0.0},
+    # ]
+    #
+    # optim = torch.optim.AdamW(param_groups, lr=3e-4, betas=(0.9, 0.999))
+    #
+    # # ==== 调度器（5% warmup + 余弦到 0.1×）====
+    # accum_steps = 1  # 如无梯度累积就保持 1
+    # num_update_steps_per_epoch = math.ceil(len(train_dataloader) / accum_steps)
+    # total_steps = num_update_steps_per_epoch * EPOCHS
+    # warmup_steps = int(0.05 * total_steps)
+    #
+    # def lr_lambda(step):
+    #     if step < warmup_steps:
+    #         return step / max(1, warmup_steps)
+    #     prog = (step - warmup_steps) / max(1, total_steps - warmup_steps)
+    #     return 0.1 + 0.9 * 0.5 * (1.0 + math.cos(math.pi * prog))
+    #
+    # # 如果是“全新开始训练”：
+    # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=-1)
+    #
+    # # 如果“从 epoch = start_epoch 续训但没有保存旧 scheduler 状态”，估算已走的步数避免重复 warmup：
+    # # global_step = start_epoch * num_update_steps_per_epoch
+    # # scheduler = torch.optim.lr_scheduler.LambdaLR(optim, lr_lambda, last_epoch=global_step-1)
 
     print("Optimizer loaded.")
     model.train()
@@ -1163,13 +1165,13 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
     # with open("result_body_res.txt", "w") as f:
     #     pass
-    def load_checkpoint(model, optimizer, scheduler, checkpoint_path):
+    def load_checkpoint(model, optimizer, checkpoint_path):
         if os.path.exists(checkpoint_path):
             checkpoint = torch.load(checkpoint_path)
             model.load_state_dict(checkpoint['model_state_dict'])
             optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
-                scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
+            # if scheduler is not None and checkpoint.get("scheduler_state_dict") is not None:
+            #     scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
             best_precision = checkpoint["best_precision"]
             lowest_loss = checkpoint["lowest_loss"]
             best_avgf1 = checkpoint["best_avgf1"]
@@ -1183,9 +1185,9 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
 
 # Example usage before starting the training loop:
     if os.path.exists(checkpoint_path):
-        start_epoch, best_precision, lowest_loss, best_avgf1 = load_checkpoint(model, optim, scheduler, checkpoint_path)
+        start_epoch, best_precision, lowest_loss, best_avgf1 = load_checkpoint(model, optim, checkpoint_path)
     else:
-        start_epoch = load_checkpoint(model, optim, scheduler, checkpoint_path)
+        start_epoch = load_checkpoint(model, optim, checkpoint_path)
 
     #早停对象应该在进训练前定义
     early_stopping = EarlyStopping(patience=10, verbose=True)
@@ -1193,6 +1195,9 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     for epoch in range(start_epoch, EPOCHS):
         #原本代码并没有在每个epoch开始的时候将模型设回train模式
         model.train()
+
+        #计时器
+        train_start_time = time.time()
           
 
     # for epoch in range(EPOCHS):
@@ -1205,16 +1210,16 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         # # Run algo
 
 
-        # if ( epoch <= 25):
-        #     optim = SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
-        # if (25 < epoch <= 50):
-        #     optim = SGD(model.parameters(), lr=0.5e-3, momentum=0.9, weight_decay=1e-4)
-        # if (50 < epoch <= 75):
-        #     optim = SGD(model.parameters(), lr=0.5e-4, momentum=0.9, weight_decay=1e-4)
-        # if (75 < epoch <= 100):
-        #     optim = SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=1e-4)
-        # if ( epoch> 100):
-        #     optim = SGD(model.parameters(), lr=0.5e-5, momentum=0.9, weight_decay=1e-4)
+        if ( epoch <= 25):
+            optim = SGD(model.parameters(), lr=1e-3, momentum=0.9, weight_decay=1e-4)
+        if (25 < epoch <= 50):
+            optim = SGD(model.parameters(), lr=0.5e-3, momentum=0.9, weight_decay=1e-4)
+        if (50 < epoch <= 75):
+            optim = SGD(model.parameters(), lr=0.5e-4, momentum=0.9, weight_decay=1e-4)
+        if (75 < epoch <= 100):
+            optim = SGD(model.parameters(), lr=1e-5, momentum=0.9, weight_decay=1e-4)
+        if ( epoch> 100):
+            optim = SGD(model.parameters(), lr=0.5e-5, momentum=0.9, weight_decay=1e-4)
         # 训练损失
         train_losses = LossAverageMeter()
 
@@ -1293,8 +1298,8 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
             # 反向传播，进一步优化
             loss.backward()
             optim.step()
-            optim.zero_grad(set_to_none=True)  #这两行是我的第二版优化器添加的
-            scheduler.step()  # ✅ 放在 optimizer.step() 之后
+            # optim.zero_grad(set_to_none=True)  #这两行是我的第二版优化器添加的
+            # scheduler.step()  # ✅ 放在 optimizer.step() 之后
 
             # Calculate accuracy
             out1 = F.softmax(out1, 1)  # Softmax将一组数值转换为概率分布
@@ -1337,9 +1342,23 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                      %(epoch, subepoch, train_losses.avg, M, train_acc1.getacc(), train_acc2.getacc(), train_acc3.getacc(), train_acc4.getacc()))
             
 
+        #计时器
+        train_end_time = time.time()
+
+        #保存当前Epoch的最终training log
+        with open(file=train_and_val_epoch_wise_log, mode="a+") as f:
+            f.write(
+                "Epoch: %d, Loss: %f, Overall_average_acc: %f, total_acc1: %f, total_acc2: %f, total_acc3: %f, total_acc4: %f\n" \
+                % (epoch, train_losses.avg, (train_acc1.getacc()+train_acc2.getacc()+train_acc3.getacc()+train_acc4.getacc())/4.0, train_acc1.getacc(), train_acc2.getacc(), train_acc3.getacc(),
+                   train_acc4.getacc()))
+
         # 验证阶段
         print("Valing...")
         # val_losses = LossAverageMeter()
+
+        #计时器
+        val_start_time = time.time()
+
 
         val_losses1 = LossAverageMeter()
         val_losses2 = LossAverageMeter()
@@ -1499,6 +1518,28 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
         print("Epoch: %d,best_precision: %f,lowest_loss: %f,best_avgf1: %f" % (
         epoch, best_precision, lowest_loss, best_avgf1))
 
+
+        #计时器
+        val_end_time =  time.time()
+
+        train_time_use = train_end_time - train_start_time
+        val_time_use = val_end_time - val_start_time
+
+
+        #保存当前Epoch的最终Validation log
+        with open(file=train_and_val_epoch_wise_log, mode="a+") as f:
+            f.write("Epoch: %d, Loss: %f, Overall_val_acc (precision): %f, total_acc1: %f,total_acc2: %f, total_acc3: %f, total_acc4: %f, \
+                    avgf11: %f, avgf12: %f, avgf13: %f, avgf14: %f, Overall_avgf1: %f\n" \
+                    % (epoch, val_losses, val_acc, val_acc1.getacc(), val_acc2.getacc(), val_acc3.getacc(),
+                       val_acc4.getacc(), avgf11, avgf12, avgf13, avgf14, (avgf11+avgf12+avgf13+avgf14)/4.0))
+            f.write("Epoch: %d,best_precision: %f,lowest_loss: %f,best_avgf1: %f\n" % (epoch, best_precision, lowest_loss, best_avgf1))
+            f.write(f"train_start_time: {train_start_time}, train_end_time: {train_end_time}, val_start_time: {val_start_time}, val_end_time: {val_end_time}\n")
+            f.write(f"train_time_use: {train_time_use/60.0} minutes, val_time_use: {val_time_use/60.0} minutes\n\n")
+
+
+
+
+
         # #我加的scheduler更新（第一版优化器）
         # # ... 验证完整个 val_loader，得到 val_loss_epoch ...
         # scheduler.step()  # 放在每个 epoch 末
@@ -1526,14 +1567,18 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
                 'epoch': epoch,
                 'model_state_dict': model.state_dict(),
                 'optimizer_state_dict': optim.state_dict(),
-                "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
+                # "scheduler_state_dict": scheduler.state_dict() if scheduler is not None else None,
                 'best_precision': best_precision,
                 'lowest_loss': lowest_loss,
                 'best_avgf1': best_avgf1,
             }, checkpoint_path)
 
+            #如果触发best_precision更新则重置早停
+            early_stopping = EarlyStopping(patience=10, verbose=True)
+
             print("Successfully saved the model with the best precision!")
             print("Successfully saved checkpoint!")
+            print("Re-initiate EarlyStopping object!")
 
         # 保存最低损失模型
         # lowest_path = os.path.join(checkpoint_dir, 'lowest_loss_swin_block_context.pt')
