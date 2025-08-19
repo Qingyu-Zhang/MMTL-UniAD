@@ -1063,7 +1063,7 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     # model = ImageConvNet().cuda()
     # model = TotalNet().cuda()
     model = TotalNet()  # 创建模型实例
-    # model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
+    model = nn.DataParallel(model)  # 使用 DataParallel 包装模型 （第4版没开，第5版开了）
     
     # model_dict = torch.load("/root/GLMDrivenet/best_model_cmt.pt")
     # # model.load_state_dict({k.replace('module.',''):v for k,v in model_dict.items()})
@@ -1193,8 +1193,8 @@ def main(use_cuda=True, EPOCHS=100, batch_size=48):
     early_stopping = EarlyStopping(patience=10, verbose=True)
 
     for epoch in range(start_epoch, EPOCHS):
-        #原本代码并没有在每个epoch开始的时候将模型设回train模式
-        model.train()
+        #原本代码并没有在每个epoch开始的时候将模型设回train模式 （第4版开了这个model.train()，第五版没开想看看按他原本的写法会怎样，就没开）
+        # model.train()
 
         #计时器
         train_start_time = time.time()
@@ -1626,7 +1626,7 @@ class TestMeter(object):
 def test(use_cuda=True, batch_size=16, model_name=best_path):
 
     model = TotalNet()  # 创建模型实例
-    # model = nn.DataParallel(model)  # 使用 DataParallel 包装模型
+    model = nn.DataParallel(model)  # 使用 DataParallel 包装模型 （第4版没开，第5版开了）
     model = model.cuda()  # 将模型移动到 CUDA 上
     if os.path.exists(model_name):
         model.load_state_dict(torch.load(model_name))
